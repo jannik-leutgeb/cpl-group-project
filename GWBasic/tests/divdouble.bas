@@ -1,0 +1,4 @@
+10 LET A=7
+20 LET B=2
+30 PRINT A/B
+40 PRINT "Expected 3.5"

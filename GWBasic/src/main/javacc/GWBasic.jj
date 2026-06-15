@@ -1,0 +1,454 @@
+
+options {
+    STATIC=false;
+}
+
+
+PARSER_BEGIN(GWBasic)
+package de.hft_stuttgart.cpl;
+
+import java.io.InputStream;
+import java.io.IOException;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.util.Set;
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.ArrayList;
+
+public class GWBasic {
+    public record WhileItem(String id, String startLabel, String endLabel) {}
+    public record ForItem(String id, String varName, String startLabel, String endLabel, String step) {}
+    public record Goto(String fromLine, String targetLine, String kind) {}
+
+    Set<String> valueSet = new HashSet<>();
+    Stack<WhileItem> whileStack = new Stack<>();
+    Stack<ForItem> forStack = new Stack<>();
+
+    /* For the compile-time "jump target may not exist" check:
+     * remember every line number we defined and every GOTO target,
+     * then verify all targets exist once parsing is complete. */
+    Set<String> definedLines = new HashSet<>();
+    List<Goto> pendingGotos = new ArrayList<>();
+
+    String currentLine;
+    int forCounter = 0;   /* unique labels for nested/independent FOR loops */
+    int gosubCounter = 0; /* unique return-site labels for GOSUB */
+
+    public static void main(String [] args) throws FileNotFoundException {
+        InputStream input = args.length==0 ? System.in : new FileInputStream(args[0]);
+        GWBasic parser = new GWBasic(input);
+        while ( true ) {
+            try {
+                parser.parse();
+                break;
+            }
+            catch(ParseException pe) {
+                /* Emit a clean compiler diagnostic and signal failure with a
+                 * non-zero exit code, so the surrounding build pipeline does
+                 * NOT attempt to invoke the C compiler on incomplete output
+                 * (a C-compiler error would be unacceptable). */
+                System.err.println("GWBasic compile error: " + pe.getMessage());
+                System.out.flush();
+                System.exit(1);
+            }
+        }
+    }
+    public void output(String format, Object... args) {
+        System.out.printf("    ");
+        System.out.printf(format, args);
+        System.out.printf(";%n");
+    }
+    public void label(String format, Object... args) {
+        System.out.printf("  ");
+        System.out.printf(format, args);
+        System.out.printf(":%n");
+    }
+    public void comment(String format, Object... args) {
+        System.out.printf("    /* ");
+        System.out.printf(format, args);
+        System.out.printf(" */%n");
+    }
+
+    /* Compile-time check: every GOTO must target an existing line.
+     * A bad goto in the emitted C would be a C-compiler error, which
+     * the assignment forbids -- so we catch it here and emit a proper
+     * compiler error instead. */
+    void verifyGotoTargets() throws ParseException {
+        for (Goto g : pendingGotos) {
+            if (!definedLines.contains(g.targetLine())) {
+                throw new ParseException(
+                    "line " + g.fromLine() + ": " + g.kind() + " " + g.targetLine() +
+                    " -- target line number does not exist");
+            }
+        }
+    }
+}
+PARSER_END(GWBasic)
+
+TOKEN: {
+    <OPAREN: "(">
+|   <CPAREN: ")">
+|   <PLUS: "+">
+|   <MINUS: "-">
+|   <TIMES: "*">
+|   <DIVIDE: "/">
+|   <MODULO: "%">
+|   <NE: "<>">
+|   <LE: "<=">
+|   <GE: ">=">
+|   <LT: "<">
+|   <GT: ">">
+|   <EQUAL: "=">
+|   <FLOAT_NUMBER: (["0"-"9"])+ "." (["0"-"9"])* | "." (["0"-"9"])+>
+|   <DEC_NUMBER: [ "0"-"9" ] (["0"-"9"])*>
+|   <HEX_NUMBER: "&" ["H","h" ] (["0"-"9","A"-"F","a"-"f"])+>
+|   <OCT_NUMBER: "&" ["O","o" ]  (["0"-"7"])+>
+|   <PRINT: "PRINT">
+|   <LET: "LET">
+|   <WHILE: "WHILE">
+|   <WEND: "WEND">
+|   <FOR: "FOR">
+|   <TO: "TO">
+|   <STEP: "STEP">
+|   <NEXT: "NEXT">
+|   <GOTO: "GOTO">
+|   <GOSUB: "GOSUB">
+|   <RETURN: "RETURN">
+|   <DIM: "DIM">
+|   <STRING: "\"" (~["\""])* "\"">
+|   <NAME: ["a"-"z","A"-"Z"](["a"-"z","A"-"Z","0"-"9"])* (["$","%","#"])?>
+|   <EOL: "\r" | "\n" | "\r\n">
+}
+
+SKIP: {
+    " "
+|   "\t"
+}
+
+void parse():
+ {
+ }
+ {
+   prolog() ( line() )* epilog() <EOF>
+   { return; }
+ }
+
+void prolog():
+{
+}
+{
+    {
+        try {
+            InputStream prologInput = getClass().getResourceAsStream("/prolog.c");
+            prologInput.transferTo(System.out);
+            prologInput.close();
+        } catch (IOException e) {
+            throw new ParseException("Error loading prolog.c");
+        }
+    }
+}
+
+void epilog():
+{
+}
+{
+    {
+        if ( !whileStack.isEmpty() ) {
+            throw new ParseException("WHILE without WEND");
+        }
+        if ( !forStack.isEmpty() ) {
+            throw new ParseException("FOR without NEXT");
+        }
+        verifyGotoTargets();
+        try {
+            InputStream epilogInput = getClass().getResourceAsStream("/epilog.c");
+            epilogInput.transferTo(System.out);
+            epilogInput.close();
+        } catch (IOException e) {
+            throw new ParseException("Error loading epilog.c");
+        }
+    }
+}
+
+void line():
+{
+    Token number;
+}
+{
+    number=<DEC_NUMBER>
+    {
+        currentLine = number.image;
+        definedLines.add(number.image);
+        label("label_%s_init", number.image);
+    }
+    stmt()
+    {
+        label("label_%s_fini", number.image);
+    }
+    <EOL>
+}
+
+
+void stmt():
+{
+}
+{
+        printStmt()
+    |   dimStmt()
+    |   letStmt()
+    |   whileStmt()
+    |   wendStmt()
+    |   forStmt()
+    |   nextStmt()
+    |   gotoStmt()
+    |   gosubStmt()
+    |   returnStmt()
+    |   {} /* empty statement: a bare line number is allowed */
+}
+
+void printStmt():
+{
+}
+{
+    <PRINT> expr() { output("PRINT()"); }
+}
+
+void letStmt():
+{
+    Token id;
+}
+{
+    <LET> id=<NAME>
+    (
+        <OPAREN> expr() <CPAREN> <EQUAL> expr()
+        {
+            /* stack now holds: index, value -> STORE_ARRAY pops value then index */
+            output("STORE_ARRAY(\"%s\")", id.image);
+        }
+      |
+        <EQUAL> expr()
+        {
+            output("STORE(\"%s\")", id.image);
+        }
+    )
+}
+
+void dimStmt():
+{
+    Token id; Token n;
+}
+{
+    <DIM> id=<NAME> <OPAREN> n=<DEC_NUMBER> <CPAREN>
+    {
+        output("DIM(\"%s\", %s)", id.image, n.image);
+    }
+}
+
+void whileStmt():
+{
+}
+{
+    <WHILE>
+    {
+        String labelStart = "while_%s_start".formatted(currentLine);
+        String labelEnd = "while_%s_end".formatted(currentLine);
+        whileStack.push(new WhileItem(currentLine, labelStart, labelEnd));
+        label(labelStart);
+    }
+    expr()
+    {
+        output("JUMP_IF_FALSE(%s)", labelEnd);
+    }
+}
+
+void wendStmt():
+{
+}
+{
+    <WEND>
+    {
+        if ( whileStack.isEmpty() ) {
+            throw new ParseException("WEND without WHILE");
+        }
+        WhileItem item = whileStack.pop();
+        output("JUMP(%s)", item.startLabel());
+        label(item.endLabel());
+    }
+}
+
+/* FOR v = <start> TO <limit> [STEP <step>]
+ *   start value is stored into v immediately.
+ *   The loop test (v <= limit, or v >= limit for negative step) is
+ *   emitted at the top; NEXT increments v and jumps back. */
+void forStmt():
+{
+    Token id;
+    String step = "1";
+}
+{
+    <FOR> id=<NAME> <EQUAL>
+    {
+        String fid = "for_" + (forCounter++);
+        String startLabel = fid + "_start";
+        String endLabel   = fid + "_end";
+        String var = id.image;
+        String limitVar = var + "__limit";
+    }
+    expr()
+    {
+        /* initialise loop variable with the start value */
+        output("STORE(\"%s\")", var);
+    }
+    <TO> expr()
+    {
+        /* stash the limit in a hidden variable so it is evaluated once */
+        output("STORE(\"%s\")", limitVar);
+    }
+    ( <STEP> step=signedNumber() )?
+    {
+        forStack.push(new ForItem(currentLine, var, startLabel, endLabel, step));
+        label(startLabel);
+        /* loop test:  step>=0 ? var<=limit : var>=limit  */
+        output("LOAD_VAR(\"%s\")", var);
+        output("LOAD_VAR(\"%s\")", limitVar);
+        if (step.startsWith("-")) {
+            output("CMP_GE()");
+        } else {
+            output("CMP_LE()");
+        }
+        output("JUMP_IF_FALSE(%s)", endLabel);
+    }
+}
+
+String signedNumber():
+{
+    Token t; String sign = "";
+}
+{
+    ( <MINUS> { sign = "-"; } )?
+    ( t=<DEC_NUMBER> | t=<FLOAT_NUMBER> )
+    { return sign + t.image; }
+}
+
+void nextStmt():
+{
+    Token id;
+}
+{
+    <NEXT> ( id=<NAME> )?
+    {
+        if ( forStack.isEmpty() ) {
+            throw new ParseException("NEXT without FOR");
+        }
+        ForItem item = forStack.pop();
+        /* increment loop variable by step */
+        output("LOAD_VAR(\"%s\")", item.varName());
+        output("LOAD_NUM(%s)", item.step());
+        output("ADD()");
+        output("STORE(\"%s\")", item.varName());
+        output("JUMP(%s)", item.startLabel());
+        label(item.endLabel());
+    }
+}
+
+void gotoStmt():
+{
+    Token target;
+}
+{
+    <GOTO> target=<DEC_NUMBER>
+    {
+        /* defer existence check until all lines are seen */
+        pendingGotos.add(new Goto(currentLine, target.image, "GOTO"));
+        output("JUMP(label_%s_init)", target.image);
+    }
+}
+
+void gosubStmt():
+{
+    Token target;
+}
+{
+    <GOSUB> target=<DEC_NUMBER>
+    {
+        /* same existence check as GOTO */
+        pendingGotos.add(new Goto(currentLine, target.image, "GOSUB"));
+        String ret = "gosub_ret_" + (gosubCounter++);
+        /* push the return address (label-as-value), jump to the subroutine,
+         * and place the return label right after the call site */
+        output("gosub_push(&&%s)", ret);
+        output("JUMP(label_%s_init)", target.image);
+        label(ret);
+    }
+}
+
+void returnStmt():
+{
+}
+{
+    <RETURN>
+    {
+        /* pop the saved address and jump back via computed goto */
+        output("goto *goback()");
+    }
+}
+
+void expr():
+ {
+    Token op;
+ }
+ {
+    arith()
+    (
+        <EQUAL> arith() { output("CMP_EQ()"); }
+      | <NE>    arith() { output("CMP_NE()"); }
+      | <LE>    arith() { output("CMP_LE()"); }
+      | <GE>    arith() { output("CMP_GE()"); }
+      | <LT>    arith() { output("CMP_LT()"); }
+      | <GT>    arith() { output("CMP_GT()"); }
+    )?
+ }
+
+void arith():
+ {
+    Token op;
+ }
+ {
+    term() (
+          op=<PLUS> term() { output("ADD()"); }
+        | op=<MINUS> term() { output("SUB()"); } )*
+ }
+
+ void term():
+ {
+     Token op;
+ }
+ {
+    fact()
+    (
+      op=<TIMES> fact() { output("MUL()"); }
+    | op=<DIVIDE> fact() { output("DIV()"); }
+    | op=<MODULO> fact() { output("MOD()"); }
+    )*
+ }
+
+ void fact():
+ {
+    Token t;
+ }
+ {
+     <OPAREN> expr() <CPAREN>
+     | t=<FLOAT_NUMBER> { output("LOAD_NUM(%s)", t.image); }
+     | t=<DEC_NUMBER> { output("LOAD_CONST(%s)", t.image); }
+     | t=<OCT_NUMBER> { output("LOAD_CONST(%s)", t.image); }
+     | t=<HEX_NUMBER> { output("LOAD_CONST(%s)", t.image); }
+     | LOOKAHEAD(2)
+       t=<NAME> <OPAREN> expr() <CPAREN>
+                  { output("LOAD_ARRAY(\"%s\")", t.image); }
+     | t=<NAME>   { output("LOAD_VAR(\"%s\")", t.image); }
+     | t=<STRING> { output("LOAD_STR(%s)", t.image); }
+ }

@@ -1,0 +1,6 @@
+10 LET X=3.5
+20 LET Y=2
+30 PRINT X+Y
+40 PRINT "Expected 5.5"
+50 PRINT X*Y
+60 PRINT "Expected 7"

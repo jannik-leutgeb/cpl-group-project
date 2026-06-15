@@ -1,0 +1,9 @@
+10 LET X=42
+20 LET Y#=42
+30 LET Z%=42
+40 PRINT X
+45 PRINT "Expected 42"
+50 PRINT Y#
+55 PRINT "Expected 42"
+60 PRINT Z%
+65 PRINT "Expected 42"

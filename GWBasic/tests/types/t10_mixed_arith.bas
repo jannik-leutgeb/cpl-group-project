@@ -1,0 +1,5 @@
+10 LET A=1
+20 LET B#=2
+30 LET R#=A/3+B#/3
+40 PRINT R#
+50 PRINT "Expected 1"

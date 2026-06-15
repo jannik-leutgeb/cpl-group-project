@@ -1,0 +1,4 @@
+10 FOR X=1 TO 2 STEP 0.5
+20 PRINT X
+30 NEXT X
+40 PRINT "Expected 1 1.5 2"
