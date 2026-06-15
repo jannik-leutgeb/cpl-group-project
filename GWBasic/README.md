@@ -46,12 +46,12 @@ adjustments:
 
 A variable's type follows from its name suffix:
 
-| Suffix  | Type   | Behavior when storing                                              |
-|---------|--------|-------------------------------------------------------------------|
-| (none)  | float  | reduced to single precision (~7 significant digits) — the DEFAULT  |
-| `#`     | double | full precision (~16 digits)                                       |
-| `%`     | int    | rounded half-up (3.5 → 4, 4.5 → 5)                                |
-| `$`     | string | character string                                                  |
+| Suffix | Type   | Behavior when storing                                             |
+|--------|--------|-------------------------------------------------------------------|
+| (none) | float  | reduced to single precision (~7 significant digits) — the DEFAULT |
+| `#`    | double | full precision (~16 digits)                                       |
+| `%`    | int    | rounded half-up (3.5 → 4, 4.5 → 5)                                |
+| `$`    | string | character string                                                  |
 
 Type checking happens at runtime: a string into a numeric variable (or
 vice versa) produces a runtime warning and a default value, never a
