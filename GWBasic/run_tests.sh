@@ -8,6 +8,17 @@ MAIN="de.hft_stuttgart.cpl.GWBasic"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Pick a timeout command if one is available (GNU coreutils ships `timeout` on
+# Linux; on macOS it's `gtimeout` from `brew install coreutils`). Fall back to
+# running the binary directly if neither exists.
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT="timeout 5"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT="gtimeout 5"
+else
+  TIMEOUT=""
+fi
+
 build() {
   echo ">> mvn clean compile"
   mvn -q clean compile || { echo "Maven build failed"; exit 1; }
@@ -33,7 +44,7 @@ one() {
   fi
 
   echo "[output]"
-  timeout 5 "$TMP/$base.bin"
+  $TIMEOUT "$TMP/$base.bin"
 }
 
 build
