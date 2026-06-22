@@ -24,3 +24,5 @@ hs_err_pid*
 replay_pid*
 GWBasic/out.c
 GWBasic/test
+/GWBasic/template
+.DS_Store
