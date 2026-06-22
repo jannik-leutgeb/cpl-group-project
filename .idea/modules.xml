@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/GWBasic/GWBasic.iml" filepath="$PROJECT_DIR$/GWBasic/GWBasic.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/cpl-group-project.iml" filepath="$PROJECT_DIR$/.idea/cpl-group-project.iml" />
     </modules>
   </component>
 </project>
