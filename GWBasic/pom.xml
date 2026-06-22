@@ -13,11 +13,39 @@
     <properties>
         <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.target>24</maven.compiler.target>
-        <maven.compiler.source>24</maven.compiler.source>
+        <!-- Compile against the Java 21 API and emit Java 21 bytecode, on ANY
+             JDK >= 21. Using `release` (not source/target) also prevents
+             accidentally calling APIs newer than Java 21. -->
+        <maven.compiler.release>21</maven.compiler.release>
     </properties>
     <build>
         <plugins>
+            <!-- Enforce the JDK baseline: fail the build immediately with a
+                 clear message if Maven runs on a JDK older than 21. Combined
+                 with maven.compiler.release=21 this guarantees a Java 21 build
+                 on every machine, regardless of which JDK is installed. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <id>enforce-java-21</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                    <message>This project requires Java 21 or newer. Point JAVA_HOME at a JDK &gt;= 21.</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <artifactId>maven-clean-plugin</artifactId>
                 <version>2.5</version>

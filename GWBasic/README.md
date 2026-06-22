@@ -15,8 +15,10 @@ Or all at once (builds + runs TEST.BAS and all tests):
     ./run_tests.sh
     ./run_tests.sh tests/types/t01_float_vs_double.bas   # single file
 
-Important: `-lm` for gcc (the runtime uses math.h). The pom.xml requires
-Java 24 — for an older JDK, adjust `maven.compiler.source/target` in the pom.
+Important: `-lm` for gcc (the runtime uses math.h). The build targets
+**Java 21** (`maven.compiler.release=21`) and the maven-enforcer-plugin
+fails fast on any JDK older than 21. Any JDK >= 21 works; the produced
+bytecode is always Java 21.
 
 ## macOS notes
 
@@ -32,13 +34,13 @@ adjustments:
    `timeout` first, then `gtimeout`; without either it runs without a
    time limit). No further editing of `run_tests.sh` is needed.
 
-2. **JDK ≥ 24**: `mvn` compiles to Java 24 bytecode (see pom.xml). If
-   `java` points to an older JDK, execution fails with
-   `UnsupportedClassVersionError`. Install a suitable JDK
-   (e.g. `brew install openjdk`) and set `JAVA_HOME` to it so that
+2. **JDK ≥ 21**: the build requires Java 21 or newer (enforced by the
+   maven-enforcer-plugin). If `java`/`mvn` point to an older JDK the build
+   stops with a clear message. Install a suitable JDK
+   (e.g. `brew install openjdk@21`) and set `JAVA_HOME` to it so that
    `mvn` and `java` use the same JDK:
 
-       export JAVA_HOME=$(/usr/libexec/java_home -v 24)
+       export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 
    Putting that line in `~/.zshrc` makes it permanent.
 
@@ -68,10 +70,13 @@ string concatenation with `+`, float literals (`3.14`, `.5`).
 ## Error handling (as required by the assignment)
 
 GOTO/GOSUB to a non-existent line number → compiler error with
-exit code 1 (gcc is never invoked). Reading a never-assigned
-variable → runtime warning, continues with 0 or "". Type mismatch →
-runtime warning. Division by zero, RETURN without GOSUB,
-array index out of bounds → runtime error.
+exit code 1 (gcc is never invoked). On such a BASIC source error the
+incomplete C is written to `target/<name>.cfail` (note: NOT a `.c`
+extension), so it is easy to see that this code was never compiled,
+and stdout stays empty. Reading a never-assigned variable → runtime
+warning, continues with 0 or "". Type mismatch → runtime warning.
+Division by zero, RETURN without GOSUB, array index out of bounds →
+runtime error (clear message, exit 1).
 
 ## Tests
 
