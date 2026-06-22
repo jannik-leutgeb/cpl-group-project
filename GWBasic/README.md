@@ -5,15 +5,43 @@ and the C code is compiled into an executable program with gcc.
 
 ## Building and running
 
-    mvn clean compile
-    java -cp target/classes:src/main/resources de.hft_stuttgart.cpl.GWBasic TEST.BAS > out.c
-    gcc -w -o test out.c -lm
-    ./test
+Build, transpile `TEST.BAS`, compile the C, and run it (one step per block):
+
+Compile the transpiler:
+
+```shell
+mvn clean compile
+```
+
+Transpile `TEST.BAS` to C:
+
+```shell
+java -cp target/classes:src/main/resources de.hft_stuttgart.cpl.GWBasic TEST.BAS > out.c
+```
+
+Compile the generated C:
+
+```shell
+gcc -w -o test out.c -lm
+```
+
+Run the program:
+
+```shell
+./test
+```
 
 Or all at once (builds + runs TEST.BAS and all tests):
 
-    ./run_tests.sh
-    ./run_tests.sh tests/types/t01_float_vs_double.bas   # single file
+```shell
+./run_tests.sh
+```
+
+Run a single test file:
+
+```shell
+./run_tests.sh tests/types/t01_float_vs_double.bas
+```
 
 Important: `-lm` for gcc (the runtime uses math.h). The build targets
 **Java 21** (`maven.compiler.release=21`) and the maven-enforcer-plugin
@@ -28,7 +56,9 @@ adjustments:
 1. **`timeout` for `run_tests.sh`**: macOS does not ship GNU `timeout`.
    Install it via Homebrew:
 
-       brew install coreutils
+   ```shell
+   brew install coreutils
+   ```
 
    The script then automatically detects `gtimeout` (it looks for
    `timeout` first, then `gtimeout`; without either it runs without a
@@ -40,7 +70,9 @@ adjustments:
    (e.g. `brew install openjdk@21`) and set `JAVA_HOME` to it so that
    `mvn` and `java` use the same JDK:
 
-       export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+   ```shell
+   export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+   ```
 
    Putting that line in `~/.zshrc` makes it permanent.
 
