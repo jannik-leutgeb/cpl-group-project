@@ -33,9 +33,8 @@ public class GWBasic {
     Stack<WhileItem> whileStack = new Stack<>();
     Stack<ForItem> forStack = new Stack<>();
 
-    /* For the compile-time "jump target may not exist" check:
-     * remember every line number we defined and every GOTO target,
-     * then verify all targets exist once parsing is complete. */
+    /* All line numbers seen, and every GOTO/GOSUB target, so we can check
+       jumps after parsing (forward jumps are fine). */
     Set<String> definedLines = new HashSet<>();
     List<Goto> pendingGotos = new ArrayList<>();
 
@@ -46,12 +45,9 @@ public class GWBasic {
     public static void main(String [] args) throws FileNotFoundException {
         InputStream input = args.length==0 ? System.in : new FileInputStream(args[0]);
 
-        /* Capture everything the parser emits into a buffer instead of
-         * streaming it straight to stdout. On success we replay the buffer to
-         * stdout unchanged. On a BASIC source error we instead leave the
-         * (incomplete) C in the target directory under a NON-".c" extension, so
-         * it is easy to recognise that this code was never compiled, and we
-         * never feed a half-written file to the C compiler. */
+        /* Buffer the output instead of streaming to stdout: on success we
+           replay it; on a source error we write the half-finished C to target/
+           under a non-".c" name, so nobody compiles it by accident. */
         PrintStream realOut = System.out;
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         System.setOut(new PrintStream(buffer, true));
@@ -59,17 +55,14 @@ public class GWBasic {
         GWBasic parser = new GWBasic(input);
         try {
             parser.parse();
-            /* Success: the produced C is complete -> emit it to stdout. */
             System.setOut(realOut);
             byte[] bytes = buffer.toByteArray();
             realOut.write(bytes, 0, bytes.length);
             realOut.flush();
         }
         catch (ParseException | TokenMgrError ex) {
-            /* Error inside the BASIC source: emit a clear diagnostic, dump the
-             * partial output under a non-".c" extension, and signal failure
-             * with a non-zero exit code so the build pipeline does NOT invoke
-             * the C compiler on incomplete output. */
+            /* Source error: report it, keep the partial C as .cfail, and exit
+               non-zero so the pipeline never runs gcc on broken output. */
             System.setOut(realOut);
             String failPath = writeFailedOutput(args, buffer.toByteArray());
             System.err.println("GWBasic compile error: " + ex.getMessage());
@@ -80,9 +73,8 @@ public class GWBasic {
         }
     }
 
-    /* Write the incomplete transpiler output into the target directory under a
-     * ".cfail" extension. Returns the path written, or null if it could not be
-     * written (in which case the compile error is still reported). */
+    /* Write the partial output to target/<name>.cfail; return the path, or
+       null if writing failed. */
     static String writeFailedOutput(String[] args, byte[] bytes) {
         String base;
         if (args.length == 0) {
@@ -119,10 +111,8 @@ public class GWBasic {
         System.out.printf(" */%n");
     }
 
-    /* Compile-time check: every GOTO must target an existing line.
-     * A bad goto in the emitted C would be a C-compiler error, which
-     * the assignment forbids -- so we catch it here and emit a proper
-     * compiler error instead. */
+    /* A GOTO/GOSUB to a missing line would become a dangling label in the C
+       and fail to compile, so reject it here instead. */
     void verifyGotoTargets() throws ParseException {
         for (Goto g : pendingGotos) {
             if (!definedLines.contains(g.targetLine())) {
@@ -326,10 +316,8 @@ void wendStmt():
     }
 }
 
-/* FOR v = <start> TO <limit> [STEP <step>]
- *   start value is stored into v immediately.
- *   The loop test (v <= limit, or v >= limit for negative step) is
- *   emitted at the top; NEXT increments v and jumps back. */
+/* FOR v = start TO limit [STEP s]: store start in v, evaluate limit once into a
+   hidden var, test at the top; NEXT bumps v by s and jumps back. */
 void forStmt():
 {
     Token id;
@@ -346,12 +334,10 @@ void forStmt():
     }
     expr()
     {
-        /* initialise loop variable with the start value */
         output("STORE(\"%s\")", var);
     }
     <TO> expr()
     {
-        /* stash the limit in a hidden variable so it is evaluated once */
         output("STORE(\"%s\")", limitVar);
     }
     ( <STEP> step=signedNumber() )?
@@ -391,7 +377,6 @@ void nextStmt():
             throw new ParseException("NEXT without FOR");
         }
         ForItem item = forStack.pop();
-        /* increment loop variable by step */
         output("LOAD_VAR(\"%s\")", item.varName());
         output("LOAD_NUM(%s)", item.step());
         output("ADD()");
@@ -424,8 +409,7 @@ void gosubStmt():
         /* same existence check as GOTO */
         pendingGotos.add(new Goto(currentLine, target.image, "GOSUB"));
         String ret = "gosub_ret_" + (gosubCounter++);
-        /* push the return address (label-as-value), jump to the subroutine,
-         * and place the return label right after the call site */
+        /* save the return address, jump into the sub, resume at ret */
         output("gosub_push(&&%s)", ret);
         output("JUMP(label_%s_init)", target.image);
         label(ret);

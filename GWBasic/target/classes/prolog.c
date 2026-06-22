@@ -306,11 +306,9 @@ void CMP_GE(void){ Value b=pop(),a=pop(); push(make_num(cmp_values(a,b,">=") >= 
 #define JUMP_IF_FALSE(label) if (!stack_pop()) goto label
 
 int main(void) {
-    /* Guarantee that main() always contains at least one address-of-label
-     * expression. RETURN emits a computed `goto *goback()`, which GCC/Clang
-     * refuse to compile in a function that has no `&&label` anywhere -- e.g. a
-     * program that uses RETURN but never GOSUB. This dead branch supplies one,
-     * so the C always compiles and goback() can raise a clean runtime error
-     * ("RETURN without GOSUB") instead of producing a C-compiler error. */
+    /* RETURN compiles to `goto *goback()`. GCC/Clang reject a computed goto in
+       a function with no `&&label` at all, so a RETURN-without-GOSUB program
+       wouldn't compile. This dead branch supplies the label; goback() still
+       reports "RETURN without GOSUB" at runtime. Don't delete it. */
     if (0) { goto *(&&_rt_anchor); }
     _rt_anchor:;

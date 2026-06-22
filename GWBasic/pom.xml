@@ -13,17 +13,12 @@
     <properties>
         <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Compile against the Java 21 API and emit Java 21 bytecode, on ANY
-             JDK >= 21. Using `release` (not source/target) also prevents
-             accidentally calling APIs newer than Java 21. -->
+        <!-- Build to Java 21 bytecode on any JDK >= 21. -->
         <maven.compiler.release>21</maven.compiler.release>
     </properties>
     <build>
         <plugins>
-            <!-- Enforce the JDK baseline: fail the build immediately with a
-                 clear message if Maven runs on a JDK older than 21. Combined
-                 with maven.compiler.release=21 this guarantees a Java 21 build
-                 on every machine, regardless of which JDK is installed. -->
+            <!-- Fail the build with a clear message if run on a JDK older than 21. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
